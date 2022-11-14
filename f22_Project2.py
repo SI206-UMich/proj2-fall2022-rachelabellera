@@ -1,3 +1,4 @@
+from urllib import request
 from xml.sax import parseString
 from bs4 import BeautifulSoup
 import re
@@ -26,35 +27,60 @@ def get_listings_from_search_results(html_file):
     ]
     """
 
-    with open(html_file, 'r') as f:
-        contents = f.read()
-    soup = BeautifulSoup(contents, 'html.parser')
+    content = open(html_file, 'r')
+    content2 = content.read()
+    soup = BeautifulSoup(content2, 'html.parser')
     
-    #get titles
-    titles = soup.find_all('div', class_ = "t1jojoys dir dir-ltr")
-    
+    return_list = []
+
+    #get the titles 
+    tag1 = soup.find_all('div', class_ = "t1jojoys dir dir-ltr")
     title_list = []
-    for title in titles:
-        title_list.append(title.text)
+    var = []
+    for i in tag1:
+        var = str(i).split(">")
+        x = var[1].split('<')
+        title_list.append(x[0])
 
-    #get prices
-    prices = soup.find_all('span', class_ = "_tyxjp1")
+    #list of prices 
+    tag2 = soup.find_all('span', class_ = "_tyxjp1") 
+    strtag2 = str(tag2)
     price_list = []
-    for price in prices:
-        price_list.append(int(price.text.lstrip('$')))
 
-    #get listing id 
-    ids = soup.find_all('div', class_ = "t1jojoys dir dir-ltr")
-    id_list = []
-    for id in ids:
-        id_list.append(id.get("id").lstrip('title_'))
+    cost = 0
+    for i in tag2:
+        cost = i.text.lstrip('$')
+        price_list.append(int(cost))
+        
+        
+    string_id_list = []
+    tag3 = soup.find_all('meta', itemprop = "url")
+
+    # TODO: this needs fixing because of the "plus" parts of this  
+    for i in tag3:
+        stri = str(i)
+        id = stri.split('/')
+        boolplus = False
+        for j in id:
+            if j == 'plus':
+                boolplus = True 
+                
+        if boolplus == True:
+            x = id[3].split('?')
+            string_id_list.append(x[0])
+        else:
+            x = id[2].split('?')
+            string_id_list.append(x[0])
+
+    #make the tuples into the final list 
+
     
+    for i in range(0,len(string_id_list)):
+        tup = (title_list[i], price_list[i], string_id_list[i])
+        return_list.append(tup)
 
-    total_list = []
-    for i in range(0, len(title_list)):
-        tup = (title_list[i], price_list[i], id_list[i])
-        total_list.append(tup)
-    return(total_list)
+    content.close()
+    return return_list
 
 
 def get_listing_information(listing_id):
@@ -81,61 +107,108 @@ def get_listing_information(listing_id):
         number of bedrooms
     )
     """
-
-    source_dir = os.path.dirname(__file__)
- 
-    for root, dirs, files in os.walk(source_dir):
-        for file in files:
-            if file.startswith('listing_' + listing_id + '.html'):
-                full_path = os.path.join(source_dir, 'html_files', file)
-                f = open(full_path,'r', encoding='utf-8')
-                content = f.read()
-                f.close()
-
-                soup = BeautifulSoup(content, 'html.parser')
-
-                policy_list = ""
-                #search for policy number
-                policy = soup.find('li', class_ = "f19phm7j dir dir-ltr")
-                if re.search(r"[0-9]", policy.text):
-                    matches = re.findall("Policy number: (.+)", policy.text)
-                    for match in matches:
-                        for policy in matches:
-                            if len(policy) > 0:
-                                policy_list = policy
-                elif re.search(r"[pP]ending", policy.text):
-                    policy_list = "Pending"
-                else:
-                    policy_list = "Exempt"
-
-                
-                #search for entire/private/shared room
-                room_list = ""
-                rooms = soup.find('div', class_ = "_cv5qq4")
-
-                if "Entire" in rooms.text:
-                    room_list = "Entire Room"
-                elif "Shared" in rooms.text:
-                    room_list = "Shared Room"
-                else:
-                    room_list = "Private Room"
-
-                #search for number of bedrooms
-                bedroom_list = ""
-                bedrooms = soup.find_all('li', class_ = "l7n4lsf dir dir-ltr")
-                
-                #gets the second li text of all of the li tags (e.g. 1 bedroom)
-                bed = bedrooms[1].text.strip(' · ')
-
-                #gets the first character in the string (e.g. gets 1 in 1 bedroom)
-                if bed[0] == "S":
-                    bedroom_list = 1
-                else:
-                    bedroom_list = int(bed[0])
-
-                return (policy_list, room_list, bedroom_list)
+    '''examples of policy numbers
+    #     STR-0001541
+    #     2022-004088STR
+    #     2022-004088STR
+    #     STR-0004333
+    #     "STR-0000051"
+    # '''
 
 
+    f = "html_files/listing_" + listing_id + ".html"
+
+    # f = "html_files/listing_1944564.html"
+    # 1944564
+    # f = "html_files/listing_32871760.html"
+    # 32871760
+    content = open(f, 'r')
+    content2 = content.read()
+    soup = BeautifulSoup(content2, 'html.parser')
+
+    policy_number = ""
+    x = soup.find('li', class_ ="f19phm7j dir dir-ltr")
+    x = str(x)
+    x = x.split(">")
+    x = x[2].split("<")
+    x = x[0]
+
+    # Hotel room in Mission District,109,41545776,Exempt,Entire Room,1 something about exempt is not correct
+    #16204265
+    
+   
+    boolexempt = False
+    
+    if x.isdigit() == True:
+        boolexempt = True
+
+    if (("STR" in x) and (x.startswith("L") == False)) or ((boolexempt == True) and (x.startswith("L") == False)):
+        policy_number = x
+    elif ("pending" in x) or ("Pending" in x):
+        policy_number = "Pending"
+    else:
+        policy_number = "Exempt"
+
+    place_type = ""
+    tag_place_type = soup.find('meta', property = "og:description")
+
+    tag_place_type = str(tag_place_type)
+    list_tag_place_type = tag_place_type.split()
+    final_place_type = ""
+    
+    booltype = False 
+
+
+    if ("private" in list_tag_place_type[1]) or ("Private" in list_tag_place_type[1]):
+        final_place_type = "Private Room"
+        booltype = True 
+    if ("shared" in list_tag_place_type[1]) or ("Shared" in list_tag_place_type[1]):
+            final_place_type = "Shared Room"
+            booltype = True 
+    
+    if booltype == False:
+        final_place_type = "Entire Room"
+    '''  
+    for i in list_tag_place_type:
+        if ("private" in i[1]) or ("Private" in i[1]):
+            final_place_type = "Private Room"
+            booltype = True 
+        if ("shared" in i) or ("Shared" in i):
+            final_place_type = "Shared Room"
+            booltype = True 
+    
+    if booltype == False:
+        final_place_type = "Entire Room"
+    '''
+
+    tag_num_bedrooms = soup.find('div', class_ = "_tqmy57")
+    tag_num_bedrooms = str(tag_num_bedrooms)
+    tag_num_bedrooms = tag_num_bedrooms.split("<")
+    new_str = ""
+    for i in tag_num_bedrooms:
+        
+        if ("bedroom" in i) or ("studio" in i) or ("bed" in i):
+            new_str = i
+    
+    
+    new_str = new_str.split(">")
+
+    if len(new_str) > 1:
+        new_str = new_str[1]
+        new_str = new_str.split()
+        new_str = (new_str[0])
+   
+    new_str = str(new_str)
+
+    
+    ret_tuple = (policy_number, final_place_type, int(new_str))
+
+    content.close()
+    
+    return ret_tuple
+    #pass  
+    
+    
 
 def get_detailed_listing_database(html_file):
     """
@@ -150,23 +223,27 @@ def get_detailed_listing_database(html_file):
         (Listing Title 2,Cost 2,Listing ID 2,Policy Number 2,Place Type 2,Number of Bedrooms 2),
         ...
     ]
+
+
     """
-
-    detailed_list = []
-    listings = get_listings_from_search_results(html_file)
-    for listing in listings:
-        listing_id = listing[2]
-        listing_info = get_listing_information(listing_id)
-
-        #create lists so you can combine them
-        listing = (list(listing))
-        listing_info = (list(listing_info))
-        listing.extend(listing_info)
-        
-        listing = tuple(listing)
-        detailed_list.append(listing)
     
-    return detailed_list
+    # get_listing_information
+    # f = "html_files/listing_1944564.html"
+    return_list = []
+    listings = get_listings_from_search_results(html_file)
+    # listings = get_listings_from_search_results(f)
+    len_listings = len(listings)
+    for i in range(0,len_listings):
+        tup1 = (listings[i])
+        tup2 = get_listing_information(tup1[2])
+        tup3 = tup1 + tup2 
+        return_list.append(tup3)
+
+
+    return return_list
+    
+ 
+
 
 
 def write_csv(data, filename):
@@ -192,19 +269,23 @@ def write_csv(data, filename):
     This function should not return anything.
     """
 
+    data.sort(key = lambda x:x[1])
     fout = open(filename, 'w')
-    fout.write("Listing Title,Cost,Listing ID,Policy Number,Place Type,Number of Bedrooms")
-    fout.write('\n')
+    writer = csv.writer(fout)
 
-    sorted_data = sorted(data, key = lambda x: x[1])
-    for row in sorted_data:
-        for col in row:
-            if col == row[-1]:
-                fout.write(str(col))
-            else:
-                fout.write(str(col) + ',')
-        fout.write('\n')
+    writer.writerow(["Listing Title", "Cost", "Listing ID", "Policy Number", "Place Type", "Number of Bedrooms"])
+    index = 0
+    l = []
+    for i in data:
+        for j in i:
+            l.append(str(j))
+        writer.writerow(l)
+        l = []
+
+
     fout.close()
+     
+
 
 
 
@@ -227,15 +308,20 @@ def check_policy_numbers(data):
     ]
 
     """
-    invalid_list = []
-    for listings in data:
-        policy_number = listings[3]
-        listing_id = listings[2]
-        patterns = "(Pending)|(Exempt)|(20\d{2}-00\d{4}STR)|STR-000\d{4}"
-        if re.search(patterns, policy_number) == None:
-            invalid_list.append(listing_id)
+
+
+    ret_list = []
+
+    for i in data: #goes through each tuple 
+        if i[3] != "Pending" and i[3] != "Exempt":
+            if i[3].startswith("STR") or i[3].endswith("STR"):
+                continue
+            else:
+                ret_list.append(i[2])
+            
+    return ret_list
     
-    return invalid_list
+
 
 def extra_credit(listing_id):
     """
@@ -251,34 +337,15 @@ def extra_credit(listing_id):
     gone over their 90 day limit, else return True, indicating the lister has
     never gone over their limit.
     """
+    #put all the months and years into a list  
+    #find the lowest per and highest year 
+    #make a list of that length
+    #make a count var
+    #while still on each year, count how many reviews per year
+    #if count is ever greater than 90, return False
+    #else return True
 
-
-    source_dir = os.path.dirname(__file__)
- 
-    for root, dirs, files in os.walk(source_dir):
-        for file in files:
-            if file.startswith('listing_' + listing_id + '_reviews.html'):
-                full_path = os.path.join(source_dir, 'html_files', file)
-                f = open(full_path,'r', encoding='utf-8')
-                content = f.read()
-                f.close()
-
-                soup = BeautifulSoup(content, 'html.parser')
-
-                review_list = ""
-                #search for months and years of reviews, count number of reviews
-                policy = soup.find('li', class_ = "_1f1oir5")
-                # if re.search(r"[0-9]", policy.text):
-                #     matches = re.findall("Policy number: (.+)", policy.text)
-                #     for match in matches:
-                #         for policy in matches:
-                #             if len(policy) > 0:
-                #                 policy_list = policy
-                # elif re.search(r"[pP]ending", policy.text):
-                #     policy_list = "Pending"
-                # else:
-                #     policy_list = "Exempt"
-
+    pass
 
 
 
